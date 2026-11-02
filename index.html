@@ -297,19 +297,19 @@
       <div class="empty" id="emptyTip">尚未导入台账，请先点击「导入Excel」</div>
     </div>
 
-    <!-- ③ 开票图片 -->
+    <!-- ③ 上传发票 -->
     <div class="card">
       <div class="form-rows">
-        <div class="sec-title">开票图片</div>
+        <div class="sec-title">上传发票</div>
 
         <div class="frow">
-          <div class="flabel"><span class="req">*</span>开票图片</div>
+          <div class="flabel"><span class="req">*</span>上传发票</div>
           <div class="fctrl-wide">
             <label class="up-zone" for="imgInput">
-              <span>＋</span><span>上传开票图片（至少 1 张，支持多张，jpg / png，单张 ≤10M）</span>
-              <input type="file" id="imgInput" accept="image/*" multiple style="display:none;" onchange="onPickImgs(this)">
+              <span>＋</span><span>上传发票（至少 1 张，支持多张，png / jpg / jpeg / pdf，单个 ≤50M）</span>
+              <input type="file" id="imgInput" accept="image/png,image/jpeg,application/pdf" multiple style="display:none;" onchange="onPickImgs(this)">
             </label>
-            <div class="form-err" id="imgErr">请上传开票图片</div>
+            <div class="form-err" id="imgErr">请上传发票</div>
             <div class="file-list" id="imgList"></div>
           </div>
         </div>
@@ -564,17 +564,21 @@
     var files = [].slice.call(input.files || []);
     var rejected = 0;
     files.forEach(function(f){
-      if(!/^image\//.test(f.type) || f.size > 10*1024*1024){ rejected++; return; }
-      IMGS.push({name:f.name, url:URL.createObjectURL(f)});
+      var okType = /^image\/(png|jpe?g)$/.test(f.type) || f.type === 'application/pdf';
+      if(!okType || f.size > 50*1024*1024){ rejected++; return; }
+      IMGS.push({name:f.name, url:URL.createObjectURL(f), isPdf:f.type === 'application/pdf'});
     });
     input.value = '';
     renderImgs();
-    if(rejected) toast('已忽略 ' + rejected + ' 个文件：仅支持 jpg / png，单张 ≤10M');
+    if(rejected) toast('已忽略 ' + rejected + ' 个文件：仅支持 png / jpg / jpeg / pdf，单个 ≤50M');
   }
   function renderImgs(){
     var box = document.getElementById('imgList');
     box.innerHTML = IMGS.map(function(m,i){
-      return '<div class="fchip"><img src="'+m.url+'" alt="">'+
+      var thumb = m.isPdf
+        ? '<span style="width:40px;height:40px;border-radius:3px;background:var(--border-2);display:inline-flex;align-items:center;justify-content:center;font-size:18px;">📄</span>'
+        : '<img src="'+m.url+'" alt="">';
+      return '<div class="fchip">'+thumb+
                '<span>'+m.name+'</span>'+
                '<span class="x" onclick="delImg('+i+')">✕</span>'+
              '</div>';
@@ -631,10 +635,10 @@
       toast('存在校验不通过订单，请修改表格后重新上传');
       return;
     }
-    /* R12 开票图片必填 */
+    /* R12 上传发票必填 */
     if(IMGS.length === 0){
       setErr('imgErr', true);
-      toast('请上传开票图片');
+      toast('请上传发票');
       return;
     }
 
@@ -647,7 +651,7 @@
       ['导入文件名', curLedger.name],
       ['导入人', '王泳瑜'],
       ['导入时间', nowStr()],
-      ['开票图片', IMGS.length + ' 张']
+      ['上传发票', IMGS.length + ' 张']
     ].map(function(r){
       return '<div class="row"><div class="k">'+r[0]+'</div><div class="v">'+r[1]+'</div></div>';
     }).join('');
