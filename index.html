@@ -243,6 +243,14 @@
         </div>
 
         <div class="frow">
+          <div class="flabel"><span class="req">*</span>开票主体</div>
+          <div class="fctrl">
+            <input class="ipt" value="深圳市大黄鹅商务服务有限公司" readonly>
+            <div class="form-hint" style="margin-left:0;">由开票类型默认带出，不可修改</div>
+          </div>
+        </div>
+
+        <div class="frow">
           <div class="flabel"><span class="req">*</span>开票日期</div>
           <div class="fctrl">
             <input class="ipt" type="date" id="invDate">
@@ -343,7 +351,7 @@
   <div class="modal wide">
     <div class="m-ico">✓</div>
     <div class="m-title">补录成功</div>
-    <div class="m-desc">共 <b id="okCnt">0</b> 个订单开票状态已更新为「已开票」<br>已生成开票单并记入开票管理列表（开票来源：线下补录）</div>
+    <div class="m-desc">共 <b id="okCnt">0</b> 个订单开票状态已更新为「已开票」<br>已生成开票单并记入开票管理列表（申请类型：线下补录）</div>
     <div class="m-grid" id="okGrid"></div>
     <div class="modal-foot">
       <button class="btn btn-primary" onclick="document.getElementById('okMask').classList.remove('show')">我知道了</button>
@@ -647,6 +655,7 @@
     document.getElementById('okGrid').innerHTML = [
       ['商户', document.querySelector('#mch option:checked').textContent],
       ['开票类型', '快销品采购'],
+      ['开票主体', '深圳市大黄鹅商务服务有限公司'],
       ['开票日期', date],
       ['导入文件名', curLedger.name],
       ['导入人', '王泳瑜'],
