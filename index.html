@@ -117,6 +117,12 @@
   .iname{color:var(--text);}
   .ispec{color:var(--text-3);}
   .rowok{color:var(--success);font-size:12px;}
+  .sumlabel{color:var(--text-2);font-size:12.5px;font-weight:500;}
+  .dim{color:var(--text-3);}
+  .inved-tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;background:#eef1f5;color:var(--text-3);font-size:12px;}
+  .rowskip{color:var(--text-3);font-size:12px;cursor:help;border-bottom:1px dashed var(--text-3);}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn[disabled]:hover{border-color:var(--border);color:var(--text-2);background:var(--bg);}
   tbody tr.group-end td{border-bottom:2px solid var(--border);}
 
   .sum-bar{
@@ -268,11 +274,11 @@
         <div class="frow">
           <div class="flabel"><span class="req">*</span>导入Excel</div>
           <div class="fctrl-wide">
-            <button class="btn btn-primary" id="impBtn" onclick="openMock()">导入Excel</button>
+            <button class="btn btn-primary" id="impBtn" onclick="openMock()" disabled title="请先选择商户">导入Excel</button>
             <span class="form-hint" id="fileName">尚未导入台账</span>
             <div class="form-err" id="fileErr">表格格式不正确，请使用线下开票台账模板</div>
             <div class="m-sub" style="margin:8px 0 0;">
-              系统只读取表头中的<b>「订单流水号」「商品名称」「商品规格」「订单数量」「折后商品销售金额」</b>五列，其余列忽略；
+              系统只读取表头中的<b>「订单流水号」「商品名称」「商品规格」「商品数量」「折后商品销售金额」</b>五列，其余列忽略；
               商品按<b>「订单流水号 + 商品名称 + 商品规格」精确匹配</b>（不做包含匹配），名称、规格请按系统口径填写；
               金额列请先<b>另存为数值</b>（公式未重算会读到旧值，导致金额校验误判）。
             </div>
@@ -300,16 +306,17 @@
         <table class="gt">
           <thead>
             <tr>
-              <th style="width:230px;">订单流水号</th>
-              <th style="min-width:150px;">商品名称</th>
-              <th style="width:160px;">商品规格</th>
-              <th class="num" style="width:90px;">订单数量</th>
-              <th class="num">系统订单金额</th>
-              <th class="num">已开票金额</th>
-              <th class="num">剩余可开金额</th>
-              <th class="num">表格金额</th>
-              <th style="width:230px;">校验结果</th>
-              <th style="width:210px;">订单校验</th>
+              <th style="width:210px;">订单流水号</th>
+              <th class="num" style="width:100px;">系统订单金额</th>
+              <th class="num" style="width:100px;">已开票金额</th>
+              <th class="num" style="width:100px;">剩余可开金额</th>
+              <th style="min-width:140px;">商品名称</th>
+              <th style="width:140px;">商品规格</th>
+              <th class="num" style="width:80px;">商品数量</th>
+              <th class="num">折后商品销售金额</th>
+              <th class="num" style="width:100px;">本行可开金额</th>
+              <th style="width:180px;">校验结果</th>
+              <th style="width:220px;">订单校验</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -350,7 +357,7 @@
   <div class="modal wide">
     <h3>选择线下开票台账</h3>
     <div class="m-sub" style="margin-bottom:14px;">
-      原型用示例台账模拟文件解析，预览各校验分支；实际产品为文件选择器，读取「订单流水号」「折后商品销售金额」两列。
+      原型用示例台账模拟文件解析，预览各校验分支；实际产品为文件选择器，读取「订单流水号」「折后商品销售金额」等五列。
     </div>
     <div id="mockList"></div>
     <div class="modal-foot">
@@ -420,7 +427,7 @@
     ]}
   };
 
-  /* 示例台账：rows = [订单流水号, 商品名称, 商品规格, 订单数量, 折后商品销售金额(元)]（R8 五列） */
+  /* 示例台账：rows = [订单流水号, 商品名称, 商品规格, 商品数量, 折后商品销售金额(元)]（R8 五列） */
   var LEDGERS = [
     {
       id:'L1', name:'线下开票台账_部分开票.xlsx',
@@ -551,7 +558,7 @@
       else if(item.inved) reason = '该商品已开过票';                                   /* R12 */
       else if(qty !== item.qty) reason = '本期不支持按数量部分开票，请整行开票';          /* R13 */
       map[no].rows.push({name:name, spec:spec, qty:qty, fen:fen, item:(o ? item : null), reason:reason});
-      if(item) map[no].fen += fen;   /* R10：表格金额 = 匹配成功行金额之和 */
+      if(item) map[no].fen += fen;   /* R10：台账折后金额 = 匹配成功行之和 */
     });
     return order.map(function(no){ return map[no]; });
   }
@@ -593,14 +600,13 @@
     document.getElementById('tableWrap').style.display = '';
     document.getElementById('sumBar').style.display = '';
 
-    /* R16：订单号纵向合并跨 N 行商品；四个金额列逐商品行展示，订单级结果放合并单元格 */
+    /* 订单汇总行 + 商品行两级：订单流水号 / 3 个订单级金额列 / 订单校验列 rowspan 合并 */
     var ok = 0, bad = 0;
     tbody.innerHTML = '';
     curRecords.forEach(function(rec){
       var o = ORDERS[rec.no];
       var reason = validate(rec, hasSet, mch);
       rec.reason = reason;
-      rec.sysAmt = o ? o.amt : null;
       if(reason) bad++; else ok++;
 
       /* 订单级失败原因若只是「存在不通过商品行」，直接展示具体行原因 */
@@ -611,44 +617,65 @@
         dispReason = rs.join('；');
       }
 
+      /* 订单合计：本次开票 X / 提交后剩余 Y（Y = 剩余可开 − 本次开票） */
+      var orderTotal = '';
+      if(o){
+        var remain = o.amt - (o.invAmt || 0);
+        orderTotal = '<div class="subline" style="margin-top:6px;">订单合计：本次开票 '+fen2yuan(rec.fen)+
+          '<br>提交后剩余 '+fen2yuan(remain - rec.fen)+'</div>';
+      }
+
+      var n = rec.rows.length;
+
+      /* 汇总行（独立一行）：订单流水号 / 3 个订单级金额 / 汇总标签 / 本次折后合计 / 订单校验 */
+      var tr0 = document.createElement('tr');
+      tr0.innerHTML =
+        '<td class="ono" rowspan="'+(n+1)+'"><span class="mono">'+rec.no+'</span></td>'+
+        (o
+          ? '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.amt)+'</td>'+
+            '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.invAmt || 0)+'</td>'+
+            '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.amt - (o.invAmt || 0))+'</td>'
+          : '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>'+
+            '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>'+
+            '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>')+
+        '<td colspan="3" class="sumlabel">订单汇总 · '+n+' 个商品</td>'+
+        '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
+        '<td class="dim">—</td>'+
+        '<td class="dim">—</td>'+
+        '<td class="ocell" rowspan="'+(n+1)+'">'+
+          '<div>'+(reason
+            ? '<span class="pill bad">不通过</span>'
+            : '<span class="pill ok">通过</span>')+'</div>'+
+          (reason && dispReason ? '<div class="oreason">'+dispReason+'</div>' : '')+
+          orderTotal+
+        '</td>';
+      tbody.appendChild(tr0);
+
+      /* 商品行：仅 6 列（名称/规格/数量/折后金额/本行可开金额/校验结果） */
       rec.rows.forEach(function(r, ri){
         var tr = document.createElement('tr');
-        if(ri === rec.rows.length - 1) tr.className = 'group-end';
+        if(ri === n - 1) tr.className = 'group-end';
         var it = r.item;
-        var money =
-          '<td class="num">'+(it ? fen2yuan(it.amt) : '—')+'</td>'+
-          '<td class="num">'+(it ? fen2yuan(it.inved ? it.amt : 0) : '—')+'</td>'+
-          '<td class="num">'+(it ? fen2yuan(it.amt - (it.inved ? it.amt : 0)) : '—')+'</td>'+
-          '<td class="num strong">'+fen2yuan(r.fen)+'</td>';
-        var rowRes = r.reason
-          ? '<span class="reason">'+r.reason+'</span>'
-          : '<span class="rowok">行校验通过</span>';
 
-        /* 订单校验列：独立列、纵向合并，展示订单级状态 + 失败原因 + 订单合计 */
-        if(ri === 0){
-          tr.innerHTML =
-            '<td class="ono" rowspan="'+rec.rows.length+'"><span class="mono">'+rec.no+'</span></td>'+
-            '<td class="iname">'+r.name+'</td>'+
-            '<td class="ispec">'+r.spec+'</td>'+
-            '<td class="num">×'+r.qty+'</td>'+
-            money+
-            '<td>'+rowRes+'</td>'+
-            '<td class="ocell" rowspan="'+rec.rows.length+'">'+
-              '<div>'+(reason
-                ? '<span class="pill bad">不通过</span>'
-                : '<span class="pill ok">通过</span>')+'</div>'+
-              (reason && dispReason ? '<div class="oreason">'+dispReason+'</div>' : '')+
-              '<div class="subline" style="margin-top:6px;">订单合计：表格 '+fen2yuan(rec.fen)+
-                (o ? '<br>剩余可开 '+fen2yuan(o.amt - (o.invAmt || 0)) : '')+'</div>'+
-            '</td>';
-        }else{
-          tr.innerHTML =
-            '<td class="iname">'+r.name+'</td>'+
-            '<td class="ispec">'+r.spec+'</td>'+
-            '<td class="num">×'+r.qty+'</td>'+
-            money+
-            '<td>'+rowRes+'</td>';
-        }
+        /* 本行可开金额：已开票商品显示标签；匹配失败显示 — */
+        var rowInv = it
+          ? (it.inved ? '<span class="inved-tag">已开票</span>' : fen2yuan(r.fen))
+          : '<span class="dim">—</span>';
+
+        /* 订单级失败（非行级原因）时商品行显示灰色「不提交」 */
+        var rowRes = r.reason
+          ? '<span class="reason" style="margin-left:0;">'+r.reason+'</span>'
+          : (reason
+              ? '<span class="rowskip" title="'+dispReason.replace(/"/g,'&quot;')+'">不提交</span>'
+              : '<span class="rowok">行校验通过</span>');
+
+        tr.innerHTML =
+          '<td class="iname">'+r.name+'</td>'+
+          '<td class="ispec">'+r.spec+'</td>'+
+          '<td class="num">×'+r.qty+'</td>'+
+          '<td class="num">'+fen2yuan(r.fen)+'</td>'+
+          '<td class="num strong">'+rowInv+'</td>'+
+          '<td>'+rowRes+'</td>';
         tbody.appendChild(tr);
       });
     });
@@ -660,10 +687,28 @@
     document.getElementById('failBanner').style.display = bad > 0 ? 'flex' : 'none';
   }
 
-  /* 换商户后重新校验（R7 第 2 项与商户相关） */
+  /* R5：商户未选择时导入按钮置灰，悬停提示「请先选择商户」 */
+  function syncImpBtn(){
+    var mch = document.getElementById('mch').value;
+    var btn = document.getElementById('impBtn');
+    btn.disabled = !mch;
+    btn.title = mch ? '' : '请先选择商户';
+  }
+  syncImpBtn();
+
+  /* 换商户后重新校验（R7 第 2 项与商户相关）；清空商户则同时清空导入结果 */
   function onMchChange(){
     document.getElementById('mch').classList.remove('err');
     document.getElementById('mchErr').style.display = 'none';
+    syncImpBtn();
+    if(!document.getElementById('mch').value){
+      curLedger = null; curRecords = null;
+      document.getElementById('fileName').textContent = '尚未导入台账';
+      document.getElementById('impBtn').textContent = '导入Excel';
+      setErr('fileErr', false);
+      renderTable();
+      return;
+    }
     if(curRecords) renderTable();
   }
 
