@@ -117,7 +117,6 @@
   .iname{color:var(--text);}
   .ispec{color:var(--text-3);}
   .rowok{color:var(--success);font-size:12px;}
-  .sumlabel{color:var(--text-2);font-size:12.5px;font-weight:500;}
   .dim{color:var(--text-3);}
   .inved-tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;background:#eef1f5;color:var(--text-3);font-size:12px;}
   .rowskip{color:var(--text-3);font-size:12px;cursor:help;border-bottom:1px dashed var(--text-3);}
@@ -600,7 +599,7 @@
     document.getElementById('tableWrap').style.display = '';
     document.getElementById('sumBar').style.display = '';
 
-    /* 订单汇总行 + 商品行两级：订单流水号 / 3 个订单级金额列 / 订单校验列 rowspan 合并 */
+    /* 订单级列（订单流水号 / 3 个金额 / 订单校验）在首商品行 rowspan 合并；本次开票合计并入右侧订单校验列 */
     var ok = 0, bad = 0;
     tbody.innerHTML = '';
     curRecords.forEach(function(rec){
@@ -617,39 +616,7 @@
         dispReason = rs.join('；');
       }
 
-      /* 订单合计：本次开票 X / 提交后剩余 Y（Y = 剩余可开 − 本次开票） */
-      var orderTotal = '';
-      if(o){
-        var remain = o.amt - (o.invAmt || 0);
-        orderTotal = '<div class="subline" style="margin-top:6px;">订单合计：本次开票 '+fen2yuan(rec.fen)+
-          '<br>提交后剩余 '+fen2yuan(remain - rec.fen)+'</div>';
-      }
-
       var n = rec.rows.length;
-
-      /* 汇总行（独立一行）：订单流水号 / 3 个订单级金额 / 汇总标签 / 本次折后合计 / 订单校验 */
-      var tr0 = document.createElement('tr');
-      tr0.innerHTML =
-        '<td class="ono" rowspan="'+(n+1)+'"><span class="mono">'+rec.no+'</span></td>'+
-        (o
-          ? '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.amt)+'</td>'+
-            '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.invAmt || 0)+'</td>'+
-            '<td class="ocell num" rowspan="'+(n+1)+'">'+fen2yuan(o.amt - (o.invAmt || 0))+'</td>'
-          : '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>'+
-            '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>'+
-            '<td class="ocell num dim" rowspan="'+(n+1)+'">—</td>')+
-        '<td colspan="3" class="sumlabel">订单汇总 · '+n+' 个商品</td>'+
-        '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
-        '<td class="dim">—</td>'+
-        '<td class="dim">—</td>'+
-        '<td class="ocell" rowspan="'+(n+1)+'">'+
-          '<div>'+(reason
-            ? '<span class="pill bad">不通过</span>'
-            : '<span class="pill ok">通过</span>')+'</div>'+
-          (reason && dispReason ? '<div class="oreason">'+dispReason+'</div>' : '')+
-          orderTotal+
-        '</td>';
-      tbody.appendChild(tr0);
 
       /* 商品行：仅 6 列（名称/规格/数量/折后金额/本行可开金额/校验结果） */
       rec.rows.forEach(function(r, ri){
@@ -669,13 +636,42 @@
               ? '<span class="rowskip" title="'+dispReason.replace(/"/g,'&quot;')+'">不提交</span>'
               : '<span class="rowok">行校验通过</span>');
 
-        tr.innerHTML =
+        var itemCells =
           '<td class="iname">'+r.name+'</td>'+
           '<td class="ispec">'+r.spec+'</td>'+
           '<td class="num">×'+r.qty+'</td>'+
           '<td class="num">'+fen2yuan(r.fen)+'</td>'+
           '<td class="num strong">'+rowInv+'</td>'+
           '<td>'+rowRes+'</td>';
+
+        if(ri === 0){
+          /* 订单校验列：本次开票 X（N 个商品）· 提交后剩余 Y */
+          var orderTotal = '';
+          if(o){
+            var remain = o.amt - (o.invAmt || 0);
+            orderTotal = '<div class="subline" style="margin-top:6px;">本次开票 '+fen2yuan(rec.fen)+'（'+n+' 个商品）'+
+              '<br>提交后剩余 '+fen2yuan(remain - rec.fen)+'</div>';
+          }
+          tr.innerHTML =
+            '<td class="ono" rowspan="'+n+'"><span class="mono">'+rec.no+'</span></td>'+
+            (o
+              ? '<td class="ocell num" rowspan="'+n+'">'+fen2yuan(o.amt)+'</td>'+
+                '<td class="ocell num" rowspan="'+n+'">'+fen2yuan(o.invAmt || 0)+'</td>'+
+                '<td class="ocell num" rowspan="'+n+'">'+fen2yuan(o.amt - (o.invAmt || 0))+'</td>'
+              : '<td class="ocell num dim" rowspan="'+n+'">—</td>'+
+                '<td class="ocell num dim" rowspan="'+n+'">—</td>'+
+                '<td class="ocell num dim" rowspan="'+n+'">—</td>')+
+            itemCells+
+            '<td class="ocell" rowspan="'+n+'">'+
+              '<div>'+(reason
+                ? '<span class="pill bad">不通过</span>'
+                : '<span class="pill ok">通过</span>')+'</div>'+
+              (reason && dispReason ? '<div class="oreason">'+dispReason+'</div>' : '')+
+              orderTotal+
+            '</td>';
+        }else{
+          tr.innerHTML = itemCells;
+        }
         tbody.appendChild(tr);
       });
     });
