@@ -112,8 +112,10 @@
   .pill.bad{background:#fdecec;color:var(--danger);}
   .reason{color:var(--danger);font-size:12.5px;margin-left:8px;}
   .order-row td{background:#fafbfc;font-weight:500;}
+  .order-row td.dim{color:var(--text-3);font-weight:400;}
   .item-row td{color:var(--text-3);font-size:12.5px;padding-top:6px;padding-bottom:6px;}
-  .item-row .spec{color:var(--text-3);font-weight:400;}
+  .item-row .iname{color:var(--text-2);}
+  .item-row .ispec{color:var(--text-3);font-weight:400;}
   .rowok{color:var(--success);font-size:12px;}
 
   .sum-bar{
@@ -297,13 +299,15 @@
         <table class="gt">
           <thead>
             <tr>
-              <th style="width:300px;">订单流水号 / 本次开票商品</th>
+              <th style="width:230px;">订单流水号</th>
+              <th style="min-width:150px;">商品名称</th>
+              <th style="width:160px;">商品规格</th>
+              <th class="num" style="width:90px;">订单数量</th>
               <th class="num">系统订单金额</th>
               <th class="num">已开票金额</th>
               <th class="num">剩余可开金额</th>
-              <th style="width:110px;">本次开票商品</th>
               <th class="num">表格金额</th>
-              <th style="width:250px;">校验结果</th>
+              <th style="width:230px;">校验结果</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -601,11 +605,11 @@
       var tr = document.createElement('tr');
       tr.className = 'order-row';
       tr.innerHTML =
-        '<td><span class="mono">'+rec.no+'</span></td>'+
+        '<td><span class="mono">'+rec.no+'</span><div class="subline">本次开票 '+rec.rows.length+' 个商品</div></td>'+
+        '<td colspan="3" class="dim">—</td>'+
         '<td class="num">'+(o ? fen2yuan(o.amt) : '—')+'</td>'+
         '<td class="num">'+(o ? fen2yuan(o.invAmt || 0) : '—')+'</td>'+
         '<td class="num">'+(o ? fen2yuan(remain) : '—')+'</td>'+
-        '<td>'+rec.rows.length+' 个商品</td>'+
         '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
         '<td>'+(reason
               ? '<span class="pill bad">不通过</span><span class="reason">'+reason+'</span>'
@@ -616,9 +620,11 @@
         var ir = document.createElement('tr');
         ir.className = 'item-row';
         ir.innerHTML =
-          '<td><div class="subline">└ '+r.name+'<span class="spec">（'+r.spec+'）</span></div></td>'+
-          '<td colspan="3"></td>'+
+          '<td></td>'+
+          '<td class="iname">└ '+r.name+'</td>'+
+          '<td class="ispec">'+r.spec+'</td>'+
           '<td class="num">×'+r.qty+'</td>'+
+          '<td colspan="3"></td>'+
           '<td class="num">'+fen2yuan(r.fen)+'</td>'+
           '<td>'+(r.reason
                 ? '<span class="reason">'+r.reason+'</span>'
