@@ -111,6 +111,10 @@
   .pill.ok{background:#e8f7ef;color:var(--success);}
   .pill.bad{background:#fdecec;color:var(--danger);}
   .reason{color:var(--danger);font-size:12.5px;margin-left:8px;}
+  .order-row td{background:#fafbfc;font-weight:500;}
+  .item-row td{color:var(--text-3);font-size:12.5px;padding-top:6px;padding-bottom:6px;}
+  .item-row .spec{color:var(--text-3);font-weight:400;}
+  .rowok{color:var(--success);font-size:12px;}
 
   .sum-bar{
     display:flex;align-items:center;gap:22px;padding:10px 14px;background:#fcfcfd;
@@ -265,7 +269,8 @@
             <span class="form-hint" id="fileName">尚未导入台账</span>
             <div class="form-err" id="fileErr">表格格式不正确，请使用线下开票台账模板</div>
             <div class="m-sub" style="margin:8px 0 0;">
-              系统只读取表头中的<b>「订单流水号」</b>与<b>「折后商品销售金额」</b>两列，其余列忽略；
+              系统只读取表头中的<b>「订单流水号」「商品名称」「商品规格」「订单数量」「折后商品销售金额」</b>五列，其余列忽略；
+              商品按<b>「订单流水号 + 商品名称 + 商品规格」精确匹配</b>（不做包含匹配），名称、规格请按系统口径填写；
               金额列请先<b>另存为数值</b>（公式未重算会读到旧值，导致金额校验误判）。
             </div>
           </div>
@@ -292,10 +297,13 @@
         <table class="gt">
           <thead>
             <tr>
-              <th style="width:360px;">订单流水号</th>
+              <th style="width:300px;">订单流水号 / 本次开票商品</th>
               <th class="num">系统订单金额</th>
+              <th class="num">已开票金额</th>
+              <th class="num">剩余可开金额</th>
+              <th style="width:110px;">本次开票商品</th>
               <th class="num">表格金额</th>
-              <th style="width:260px;">校验结果</th>
+              <th style="width:250px;">校验结果</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -351,7 +359,7 @@
   <div class="modal wide">
     <div class="m-ico">✓</div>
     <div class="m-title">补录成功</div>
-    <div class="m-desc">共 <b id="okCnt">0</b> 个订单开票状态已更新为「已开票」<br>已生成开票单并记入开票管理列表（申请类型：线下补录）</div>
+    <div class="m-desc">补录成功，共 <b id="okCnt">0</b> 个订单开票状态已更新<span id="okState"></span><br>本次商品已打上已开票标记，已生成开票单并记入开票管理列表（申请类型：线下补录）</div>
     <div class="m-grid" id="okGrid"></div>
     <div class="modal-foot">
       <button class="btn btn-primary" onclick="document.getElementById('okMask').classList.remove('show')">我知道了</button>
@@ -364,72 +372,111 @@
 <script>
   /* =========================================================
      模拟数据：系统订单（金额单位 = 分，与后台一致）
+     R11/R12 校验四项 + R20「部分开票」+ 商品行已开票标记
      ========================================================= */
   var ORDERS = {
-    '2026101610010000000000000001': {mch:'A', amt:26218, status:'交易完成', inv:'未开票'},
-    '2026101610010000000000000002': {mch:'A', amt:12840, status:'交易完成', inv:'已关闭'},
-    '2026101610010000000000000003': {mch:'A', amt:50000, status:'交易完成', inv:'未开票',
-                                      hedge:['2026101610010000000000000003-D1']},
-    '2026101610010000000000000003-D1': {mch:'A', amt:-50000, status:'交易完成', inv:'未开票'},
-    '2026101610010000000000000004': {mch:'A', amt:9620,  status:'交易完成', inv:'已作废'},
-    '2026101610010000000000000005': {mch:'A', amt:8800,  status:'交易完成', inv:'已开票'},
-    '2026101610010000000000000006': {mch:'A', amt:26218, status:'交易完成', inv:'未开票'},
-    '2026101610010000000000000007': {mch:'B', amt:12000, status:'交易完成', inv:'未开票'},
-    '2026101610010000000000000008': {mch:'A', amt:4500,  status:'交易关闭', inv:'未开票'}
+    /* 订单A：4 个商品合计 34,466.00（对齐验收用例） */
+    '2026101610010000000000000001': {mch:'A', amt:3446600, status:'交易完成', inv:'未开票', invAmt:0, items:[
+      {name:'康师傅冰红茶',   spec:'500ml×15瓶/箱',  qty:500, amt:1390000, inved:false},
+      {name:'美汁源果汁',     spec:'1L×12瓶/箱',     qty:200, amt:1112000, inved:false},
+      {name:'娃哈哈苏打水',   spec:'330ml×24瓶/箱',  qty:300, amt:388600,  inved:false},
+      {name:'农夫山泉无糖绿茶', spec:'500ml×15瓶/箱', qty:240, amt:556000,  inved:false}
+    ]},
+    '2026101610010000000000000002': {mch:'A', amt:12840, status:'交易完成', inv:'已关闭', invAmt:0, items:[
+      {name:'怡宝纯净水', spec:'555ml×24瓶/箱', qty:120, amt:12840, inved:false}
+    ]},
+    /* 含 -D 对冲单的主单 */
+    '2026101610010000000000000003': {mch:'A', amt:500000, status:'交易完成', inv:'未开票', invAmt:0, hedge:['2026101610010000000000000003-D1'], items:[
+      {name:'东鹏特饮', spec:'250ml×24瓶/箱', qty:600, amt:500000, inved:false}
+    ]},
+    '2026101610010000000000000003-D1': {mch:'A', amt:-500000, status:'交易完成', inv:'未开票', invAmt:0, items:[
+      {name:'东鹏特饮', spec:'250ml×24瓶/箱', qty:600, amt:-500000, inved:false}
+    ]},
+    '2026101610010000000000000004': {mch:'A', amt:9620, status:'交易完成', inv:'已作废', invAmt:0, items:[
+      {name:'雀巢咖啡', spec:'268ml×15瓶/箱', qty:80, amt:9620, inved:false}
+    ]},
+    /* 整单已开票：用于演示「该商品已开过票」 */
+    '2026101610010000000000000005': {mch:'A', amt:880000, status:'交易完成', inv:'已开票', invAmt:880000, items:[
+      {name:'元气森林气泡水', spec:'480ml×15瓶/箱', qty:200, amt:530000, inved:true},
+      {name:'佳得乐',        spec:'600ml×15瓶/箱', qty:140, amt:350000, inved:true}
+    ]},
+    /* 部分开票：已开票 26,000.00（冰红茶整行），剩余可开 26,300.00 */
+    '2026101610010000000000000006': {mch:'A', amt:5230000, status:'交易完成', inv:'部分开票', invAmt:2600000, items:[
+      {name:'康师傅冰红茶', spec:'500ml×15瓶/箱', qty:500, amt:2600000, inved:true},
+      {name:'美汁源果汁',   spec:'1L×12瓶/箱',    qty:200, amt:1500000, inved:false},
+      {name:'农夫山泉饮用水', spec:'550ml×24瓶/箱', qty:400, amt:1130000, inved:false}
+    ]},
+    '2026101610010000000000000007': {mch:'B', amt:12000, status:'交易完成', inv:'未开票', invAmt:0, items:[
+      {name:'青岛啤酒', spec:'500ml×12罐/箱', qty:60, amt:12000, inved:false}
+    ]},
+    '2026101610010000000000000008': {mch:'A', amt:4500, status:'交易关闭', inv:'未开票', invAmt:0, items:[
+      {name:'王老吉', spec:'310ml×24罐/箱', qty:150, amt:4500, inved:false}
+    ]}
   };
 
-  /* 示例台账：rows = [订单流水号, 折后商品销售金额(元)] */
+  /* 示例台账：rows = [订单流水号, 商品名称, 商品规格, 订单数量, 折后商品销售金额(元)]（R8 五列） */
   var LEDGERS = [
     {
-      id:'L1', name:'线下开票台账_20261028.xlsx',
-      desc:'5 行 · 全部校验通过（含 1 组 -D 对冲单）',
+      id:'L1', name:'线下开票台账_部分开票.xlsx',
+      desc:'订单A 4 个商品只开 2 个（13,900 + 11,120）· 通过后进入「部分开票」，剩余可开 9,446.00',
       rows:[
-        ['2026101610010000000000000001', 262.18],
-        ['2026101610010000000000000002', 128.40],
-        ['2026101610010000000000000003', 500.00],
-        ['2026101610010000000000000003-D1', -500.00],
-        ['2026101610010000000000000004', 96.20]
+        ['2026101610010000000000000001', '康师傅冰红茶', '500ml×15瓶/箱', 500, 13900.00],
+        ['2026101610010000000000000001', '美汁源果汁',   '1L×12瓶/箱',    200, 11120.00]
       ]
     },
     {
-      id:'L2', name:'线下开票台账_多类异常.xlsx',
-      desc:'5 行 · 分别触发「已开过票 / 不属于所选商户 / 非交易完成 / 订单不存在」',
+      id:'L2', name:'线下开票台账_整单开票.xlsx',
+      desc:'订单A 全部 4 个商品 · 合计 34,466.00；若已先导入 L1，其中 2 行会提示「该商品已开过票」',
       rows:[
-        ['2026101610010000000000000001', 262.18],
-        ['2026101610010000000000000005', 88.00],
-        ['2026101610010000000000000007', 120.00],
-        ['2026101610010000000000000008', 45.00],
-        ['2026101610099999999999999999', 66.00]
+        ['2026101610010000000000000001', '康师傅冰红茶',   '500ml×15瓶/箱',  500, 13900.00],
+        ['2026101610010000000000000001', '美汁源果汁',     '1L×12瓶/箱',     200, 11120.00],
+        ['2026101610010000000000000001', '娃哈哈苏打水',   '330ml×24瓶/箱',  300, 3886.00],
+        ['2026101610010000000000000001', '农夫山泉无糖绿茶', '500ml×15瓶/箱', 240, 5560.00]
       ]
     },
     {
-      id:'L3', name:'线下开票台账_金额差1分.xlsx',
-      desc:'2 行 · 第 2 行金额比系统多 1 分，触发「金额不一致」',
+      id:'L3', name:'线下开票台账_二次补录.xlsx',
+      desc:'订单A 剩余 2 个商品（3,886 + 5,560）· 累计后已开票 34,466.00，状态变「已开票」',
       rows:[
-        ['2026101610010000000000000001', 262.18],
-        ['2026101610010000000000000002', 128.41]
+        ['2026101610010000000000000001', '娃哈哈苏打水',   '330ml×24瓶/箱',  300, 3886.00],
+        ['2026101610010000000000000001', '农夫山泉无糖绿茶', '500ml×15瓶/箱', 240, 5560.00]
       ]
     },
     {
-      id:'L4', name:'线下开票台账_缺对冲单.xlsx',
-      desc:'1 行 · 只导入主单、缺 -D 对冲单，触发「对冲单未齐全」',
+      id:'L4', name:'线下开票台账_行级异常.xlsx',
+      desc:'3 行 · 分别触发「该商品已开过票 / 商品在订单中不存在 / 数量不一致」',
       rows:[
-        ['2026101610010000000000000003', 500.00]
+        ['2026101610010000000000000006', '康师傅冰红茶',       '500ml×15瓶/箱', 500, 26000.00],
+        ['2026101610010000000000000001', '康师傅冰红茶（低糖）', '500ml×15瓶/箱', 500, 13900.00],
+        ['2026101610010000000000000001', '娃哈哈苏打水',       '330ml×24瓶/箱', 100, 3886.00]
       ]
     },
     {
-      id:'L5', name:'线下开票台账_同单号4行.xlsx',
-      desc:'4 行同订单号 · 合并为 1 个订单，金额按行相加后校验通过',
+      id:'L5', name:'线下开票台账_超出剩余.xlsx',
+      desc:'订单0006 已开票 26,000.00 · 本次填 35,000.00 超出剩余可开 26,300.00',
       rows:[
-        ['2026101610010000000000000006', 100.00],
-        ['2026101610010000000000000006', 50.50],
-        ['2026101610010000000000000006', 60.00],
-        ['2026101610010000000000000006', 51.68]
+        ['2026101610010000000000000006', '美汁源果汁',     '1L×12瓶/箱',     200, 15000.00],
+        ['2026101610010000000000000006', '农夫山泉饮用水', '550ml×24瓶/箱',  400, 20000.00]
       ]
     },
     {
-      id:'L6', name:'线下开票台账_缺列.xlsx',
-      desc:'表头缺少「折后商品销售金额」列 · 导入即提示表格格式不正确',
+      id:'L6', name:'线下开票台账_缺对冲单.xlsx',
+      desc:'只导入主单、缺 -D1 对冲单 · 触发「对冲单未齐全」',
+      rows:[
+        ['2026101610010000000000000003', '东鹏特饮', '250ml×24瓶/箱', 600, 5000.00]
+      ]
+    },
+    {
+      id:'L7', name:'线下开票台账_含对冲单.xlsx',
+      desc:'主单 + -D1 对冲单同时导入 · 校验通过',
+      rows:[
+        ['2026101610010000000000000003',    '东鹏特饮', '250ml×24瓶/箱', 600, 5000.00],
+        ['2026101610010000000000000003-D1', '东鹏特饮', '250ml×24瓶/箱', 600, -5000.00]
+      ]
+    },
+    {
+      id:'L8', name:'线下开票台账_缺列.xlsx',
+      desc:'表头缺少「商品规格」列 · 导入即提示表格格式不正确',
       badHeader:true, rows:[]
     }
   ];
@@ -483,32 +530,43 @@
     renderTable();
   }
 
-  /* R6：同一流水号多行合并，金额按行相加（每行先四舍五入到分，R9） */
+  /* R10 订单汇总 + R9/R12/R13 行级校验：订单流水号+商品名称+商品规格 精确匹配 */
   function buildRecords(lg){
     var map = {}, order = [];
     lg.rows.forEach(function(r){
-      var no = String(r[0]).trim();
-      var fen = Math.round(r[1] * 100);
-      if(!map[no]){ map[no] = {no:no, fen:0, lines:0}; order.push(no); }
-      map[no].fen += fen;
-      map[no].lines++;
+      var no = String(r[0]).trim(), name = String(r[1]).trim(), spec = String(r[2]).trim();
+      var qty = parseInt(r[3], 10) || 0;
+      var fen = Math.round(r[4] * 100);
+      if(!map[no]){ map[no] = {no:no, rows:[], fen:0}; order.push(no); }
+      var o = ORDERS[no], item = null;
+      if(o){ item = o.items.filter(function(it){ return it.name === name && it.spec === spec; })[0] || null; }
+      var reason = '';
+      if(!o || !item) reason = '商品在订单中不存在';                                   /* R9 */
+      else if(item.inved) reason = '该商品已开过票';                                   /* R12 */
+      else if(qty !== item.qty) reason = '本期不支持按数量部分开票，请整行开票';          /* R13 */
+      map[no].rows.push({name:name, spec:spec, qty:qty, fen:fen, reason:reason});
+      if(item) map[no].fen += fen;   /* R10：表格金额 = 匹配成功行金额之和 */
     });
     return order.map(function(no){ return map[no]; });
   }
 
-  /* R7 / R8 / R9：逐单校验 */
+  /* R11 订单级校验（返回订单级原因，空 = 通过） */
   function validate(rec, hasSet, mch){
     var o = ORDERS[rec.no];
     if(!o) return '订单不存在';
     if(!mch) return '未选择商户';
     if(o.mch !== mch) return '不属于所选商户';
     if(o.status !== '交易完成') return '非交易完成';
-    if(['未开票','已关闭','已作废'].indexOf(o.inv) < 0) return '已开过票';
+    if(['未开票','已关闭','已作废','部分开票'].indexOf(o.inv) < 0) return '已不可开票';
     if(o.hedge){
       var miss = o.hedge.filter(function(h){ return !hasSet[h]; });
       if(miss.length) return '对冲单未齐全';
     }
-    if(o.amt !== rec.fen) return '金额不一致';
+    var badRows = rec.rows.filter(function(r){ return r.reason; }).length;
+    if(badRows) return '存在校验不通过商品行（' + badRows + ' 行）';
+    /* R15：剩余可开金额 = 订单金额 − 已开票金额 */
+    var remain = o.amt - (o.invAmt || 0);
+    if(rec.fen > remain) return '超出剩余可开金额，剩余可开 ' + (remain/100).toFixed(2) + ' 元';
     return '';
   }
 
@@ -529,6 +587,7 @@
     document.getElementById('tableWrap').style.display = '';
     document.getElementById('sumBar').style.display = '';
 
+    /* R16：逐单展示 汇总行 + 商品行明细 */
     var ok = 0, bad = 0;
     tbody.innerHTML = '';
     curRecords.forEach(function(rec){
@@ -538,17 +597,34 @@
       rec.sysAmt = o ? o.amt : null;
       if(reason) bad++; else ok++;
 
+      var remain = o ? (o.amt - (o.invAmt || 0)) : null;
       var tr = document.createElement('tr');
+      tr.className = 'order-row';
       tr.innerHTML =
-        '<td><span class="mono">'+rec.no+'</span>'+
-          (rec.lines > 1 ? '<div class="subline">台账 '+rec.lines+' 行合并计 1 单</div>' : '')+
-        '</td>'+
+        '<td><span class="mono">'+rec.no+'</span></td>'+
         '<td class="num">'+(o ? fen2yuan(o.amt) : '—')+'</td>'+
-        '<td class="num">'+fen2yuan(rec.fen)+'</td>'+
+        '<td class="num">'+(o ? fen2yuan(o.invAmt || 0) : '—')+'</td>'+
+        '<td class="num">'+(o ? fen2yuan(remain) : '—')+'</td>'+
+        '<td>'+rec.rows.length+' 个商品</td>'+
+        '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
         '<td>'+(reason
               ? '<span class="pill bad">不通过</span><span class="reason">'+reason+'</span>'
               : '<span class="pill ok">通过</span>')+'</td>';
       tbody.appendChild(tr);
+
+      rec.rows.forEach(function(r){
+        var ir = document.createElement('tr');
+        ir.className = 'item-row';
+        ir.innerHTML =
+          '<td><div class="subline">└ '+r.name+'<span class="spec">（'+r.spec+'）</span></div></td>'+
+          '<td colspan="3"></td>'+
+          '<td class="num">×'+r.qty+'</td>'+
+          '<td class="num">'+fen2yuan(r.fen)+'</td>'+
+          '<td>'+(r.reason
+                ? '<span class="reason">'+r.reason+'</span>'
+                : '<span class="rowok">行校验通过</span>')+'</td>';
+        tbody.appendChild(ir);
+      });
     });
 
     document.getElementById('sumAll').textContent = curRecords.length;
@@ -637,10 +713,10 @@
       toast('请先导入线下开票台账');
       return;
     }
-    /* R11 整批不可提交 */
+    /* R17 整批不可提交 */
     var bad = curRecords.filter(function(r){ return r.reason; }).length;
     if(bad > 0){
-      toast('存在校验不通过订单，请修改表格后重新上传');
+      toast('存在校验不通过的商品行，请修改表格后重新上传');
       return;
     }
     /* R12 上传发票必填 */
@@ -650,8 +726,24 @@
       return;
     }
 
-    /* R13 提交成功 */
+    /* R19 提交成功：商品打已开票标记 + 已开票金额累计 + 订单状态重算 */
+    var fullCnt = 0, partCnt = 0;
+    curRecords.forEach(function(rec){
+      var o = ORDERS[rec.no];
+      var noTrim = String(rec.no);
+      var lgRows = curLedger.rows.filter(function(r){ return String(r[0]).trim() === noTrim; });
+      lgRows.forEach(function(r){
+        var it = o.items.filter(function(x){ return x.name === String(r[1]).trim() && x.spec === String(r[2]).trim(); })[0];
+        if(it) it.inved = true;
+      });
+      o.invAmt = (o.invAmt || 0) + rec.fen;
+      o.inv = o.invAmt >= o.amt ? '已开票' : '部分开票';
+      if(o.inv === '已开票') fullCnt++; else partCnt++;
+    });
+
     document.getElementById('okCnt').textContent = curRecords.length;
+    document.getElementById('okState').textContent =
+      partCnt > 0 ? '（其中部分开票 ' + partCnt + ' 单 · 已开票 ' + fullCnt + ' 单）' : '';
     document.getElementById('okGrid').innerHTML = [
       ['商户', document.querySelector('#mch option:checked').textContent],
       ['开票类型', '快销品采购'],
