@@ -111,12 +111,11 @@
   .pill.ok{background:#e8f7ef;color:var(--success);}
   .pill.bad{background:#fdecec;color:var(--danger);}
   .reason{color:var(--danger);font-size:12.5px;margin-left:8px;}
-  .order-row td{background:#fafbfc;font-weight:500;}
-  .order-row td.dim{color:var(--text-3);font-weight:400;}
-  .item-row td{color:var(--text-3);font-size:12.5px;padding-top:6px;padding-bottom:6px;}
-  .item-row .iname{color:var(--text-2);}
-  .item-row .ispec{color:var(--text-3);font-weight:400;}
+  .ono{background:#fafbfc;vertical-align:top;font-weight:500;border-left:3px solid var(--primary);}
+  .iname{color:var(--text);}
+  .ispec{color:var(--text-3);}
   .rowok{color:var(--success);font-size:12px;}
+  tbody tr.group-end td{border-bottom:2px solid var(--border);}
 
   .sum-bar{
     display:flex;align-items:center;gap:22px;padding:10px 14px;background:#fcfcfd;
@@ -591,7 +590,7 @@
     document.getElementById('tableWrap').style.display = '';
     document.getElementById('sumBar').style.display = '';
 
-    /* R16：逐单展示 汇总行 + 商品行明细 */
+    /* R16：一个订单号纵向合并跨 N 行商品；订单级金额与结果显示在首行 */
     var ok = 0, bad = 0;
     tbody.innerHTML = '';
     curRecords.forEach(function(rec){
@@ -602,34 +601,43 @@
       if(reason) bad++; else ok++;
 
       var remain = o ? (o.amt - (o.invAmt || 0)) : null;
-      var tr = document.createElement('tr');
-      tr.className = 'order-row';
-      tr.innerHTML =
-        '<td><span class="mono">'+rec.no+'</span><div class="subline">本次开票 '+rec.rows.length+' 个商品</div></td>'+
-        '<td colspan="3" class="dim">—</td>'+
-        '<td class="num">'+(o ? fen2yuan(o.amt) : '—')+'</td>'+
-        '<td class="num">'+(o ? fen2yuan(o.invAmt || 0) : '—')+'</td>'+
-        '<td class="num">'+(o ? fen2yuan(remain) : '—')+'</td>'+
-        '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
-        '<td>'+(reason
-              ? '<span class="pill bad">不通过</span><span class="reason">'+reason+'</span>'
-              : '<span class="pill ok">通过</span>')+'</td>';
-      tbody.appendChild(tr);
 
-      rec.rows.forEach(function(r){
-        var ir = document.createElement('tr');
-        ir.className = 'item-row';
-        ir.innerHTML =
-          '<td></td>'+
-          '<td class="iname">└ '+r.name+'</td>'+
-          '<td class="ispec">'+r.spec+'</td>'+
-          '<td class="num">×'+r.qty+'</td>'+
-          '<td colspan="3"></td>'+
-          '<td class="num">'+fen2yuan(r.fen)+'</td>'+
-          '<td>'+(r.reason
-                ? '<span class="reason">'+r.reason+'</span>'
-                : '<span class="rowok">行校验通过</span>')+'</td>';
-        tbody.appendChild(ir);
+      /* 订单级失败原因若只是「存在不通过商品行」，直接展示具体行原因 */
+      var dispReason = reason;
+      if(reason && reason.indexOf('存在校验不通过商品行') === 0){
+        var rs = [];
+        rec.rows.forEach(function(r){ if(r.reason && rs.indexOf(r.reason) < 0) rs.push(r.reason); });
+        dispReason = rs.join('；');
+      }
+
+      rec.rows.forEach(function(r, ri){
+        var tr = document.createElement('tr');
+        if(ri === rec.rows.length - 1) tr.className = 'group-end';
+        if(ri === 0){
+          tr.innerHTML =
+            '<td class="ono" rowspan="'+rec.rows.length+'"><span class="mono">'+rec.no+'</span></td>'+
+            '<td class="iname">'+r.name+'</td>'+
+            '<td class="ispec">'+r.spec+'</td>'+
+            '<td class="num">×'+r.qty+'</td>'+
+            '<td class="num">'+(o ? fen2yuan(o.amt) : '—')+'</td>'+
+            '<td class="num">'+(o ? fen2yuan(o.invAmt || 0) : '—')+'</td>'+
+            '<td class="num">'+(o ? fen2yuan(remain) : '—')+'</td>'+
+            '<td class="num strong">'+fen2yuan(rec.fen)+'</td>'+
+            '<td>'+(reason
+                  ? '<span class="pill bad">不通过</span><span class="reason">'+dispReason+'</span>'
+                  : '<span class="pill ok">通过</span>')+'</td>';
+        }else{
+          tr.innerHTML =
+            '<td class="iname">'+r.name+'</td>'+
+            '<td class="ispec">'+r.spec+'</td>'+
+            '<td class="num">×'+r.qty+'</td>'+
+            '<td colspan="4"></td>'+
+            '<td class="num">'+fen2yuan(r.fen)+'</td>'+
+            '<td>'+(r.reason
+                  ? '<span class="reason">'+r.reason+'</span>'
+                  : '<span class="rowok">行校验通过</span>')+'</td>';
+        }
+        tbody.appendChild(tr);
       });
     });
 
