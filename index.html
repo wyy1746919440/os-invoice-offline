@@ -112,8 +112,8 @@
   .pill.bad{background:#fdecec;color:var(--danger);}
   .reason{color:var(--danger);font-size:12.5px;margin-left:8px;}
   .ono{background:#fafbfc;vertical-align:top;font-weight:500;border-left:3px solid var(--primary);}
-  .ono .opill{margin-top:6px;}
-  .ono .oreason{color:var(--danger);font-size:11.5px;line-height:1.5;margin-top:3px;}
+  .opill{margin-top:8px;}
+  .oreason{color:var(--danger);font-size:11.5px;line-height:1.5;margin-top:3px;}
   .iname{color:var(--text);}
   .ispec{color:var(--text-3);}
   .rowok{color:var(--success);font-size:12px;}
@@ -612,7 +612,8 @@
 
       rec.rows.forEach(function(r, ri){
         var tr = document.createElement('tr');
-        if(ri === rec.rows.length - 1) tr.className = 'group-end';
+        var isLast = (ri === rec.rows.length - 1);
+        if(isLast) tr.className = 'group-end';
         var it = r.item;
         var money =
           '<td class="num">'+(it ? fen2yuan(it.amt) : '—')+'</td>'+
@@ -623,28 +624,32 @@
           ? '<span class="reason">'+r.reason+'</span>'
           : '<span class="rowok">行校验通过</span>';
 
+        /* 订单级状态 + 订单合计：放在该订单最后一行的校验结果列末尾 */
+        var orderTail = '';
+        if(isLast){
+          orderTail =
+            '<div class="opill">'+(reason
+              ? '<span class="pill bad">不通过</span>'+(dispReason ? '<div class="oreason">'+dispReason+'</div>' : '')
+              : '<span class="pill ok">通过</span>')+'</div>'+
+            '<div class="subline">订单合计：表格 '+fen2yuan(rec.fen)+
+              (o ? ' / 剩余可开 '+fen2yuan(o.amt - (o.invAmt || 0)) : '')+'</div>';
+        }
+
         if(ri === 0){
           tr.innerHTML =
-            '<td class="ono" rowspan="'+rec.rows.length+'">'+
-              '<span class="mono">'+rec.no+'</span>'+
-              '<div class="opill">'+(reason
-                ? '<span class="pill bad">不通过</span><div class="oreason">'+dispReason+'</div>'
-                : '<span class="pill ok">通过</span>')+'</div>'+
-              '<div class="subline">订单合计：表格 '+fen2yuan(rec.fen)+
-                (o ? ' / 剩余可开 '+fen2yuan(o.amt - (o.invAmt || 0)) : '')+'</div>'+
-            '</td>'+
+            '<td class="ono" rowspan="'+rec.rows.length+'"><span class="mono">'+rec.no+'</span></td>'+
             '<td class="iname">'+r.name+'</td>'+
             '<td class="ispec">'+r.spec+'</td>'+
             '<td class="num">×'+r.qty+'</td>'+
             money+
-            '<td>'+rowRes+'</td>';
+            '<td>'+rowRes+orderTail+'</td>';
         }else{
           tr.innerHTML =
             '<td class="iname">'+r.name+'</td>'+
             '<td class="ispec">'+r.spec+'</td>'+
             '<td class="num">×'+r.qty+'</td>'+
             money+
-            '<td>'+rowRes+'</td>';
+            '<td>'+rowRes+orderTail+'</td>';
         }
         tbody.appendChild(tr);
       });
